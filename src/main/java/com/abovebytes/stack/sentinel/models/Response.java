@@ -11,6 +11,5 @@ import org.springframework.http.HttpStatus;
 public class Response {
     private boolean status = false;
     private String message;
-    private String token;
     private HttpStatus httpStatus;
 }

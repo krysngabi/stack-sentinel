@@ -1,6 +1,7 @@
 package com.abovebytes.stack.sentinel.services.email;
 
 import com.abovebytes.stack.sentinel.entities.Property;
+import com.abovebytes.stack.sentinel.models.ContainerFailure;
 import com.abovebytes.stack.sentinel.models.Response;
 import com.abovebytes.stack.sentinel.services.properties.PropertyService;
 import com.abovebytes.stack.sentinel.utils.Constants;
@@ -19,6 +20,7 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 import java.io.StringWriter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import jakarta.mail.internet.MimeMessage;
 
@@ -45,7 +47,7 @@ public class EmailSenderService {
         return propertyService.getProperty(templateName).map(Property::getValue).orElse(null);
     }
 
-    public Response sendEmailDockerDown(String containerName) {
+    public Response sendEmailDockerDown(String containerName, String reason, String status) {
         String template = Constants.DOCKER_CONTAINER_DOWN_TEMPLATE;
         Map<String, Object> parameters = new HashMap<>();
         String templateId = propertyService.getProperty(template).map(Property::getValue).orElse(null);
@@ -65,6 +67,28 @@ public class EmailSenderService {
         templateLoader.putTemplate(template, templateId);
 
         return sendEmail(to, "Docker container down", generateHtml(parameters, template), true);
+    }
+
+    public Response sendBulkAlert(List<ContainerFailure> failedContainers) {
+        String template = Constants.UNHEALTHY_DOCKER_CONTAINER_TEMPLATE;
+        Map<String, Object> parameters = new HashMap<>();
+        String templateId = propertyService.getProperty(template).map(Property::getValue).orElse(null);
+        String to = propertyService.getProperty(Constants.CRITICAL_NOTIFICATION).map(Property::getValue).orElse(null);
+
+        parameters.put("failedContainers", failedContainers);
+
+        if (templateId == null) {
+            Response responseAPI = new Response();
+            responseAPI.setMessage("Template "  + template + " not found");
+
+            log.error("The template {} was not found in the system. Please add it to the properties", template);
+
+            return responseAPI;
+        }
+
+        templateLoader.putTemplate(template, templateId);
+
+        return sendEmail(to, "Container unhealthy", generateHtml(parameters, template), true);
     }
 
     private Configuration configFreeMarker(StringTemplateLoader templateLoader) {

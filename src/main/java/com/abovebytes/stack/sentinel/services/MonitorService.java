@@ -1,6 +1,8 @@
 package com.abovebytes.stack.sentinel.services;
 
 import com.abovebytes.stack.sentinel.entities.Property;
+import com.abovebytes.stack.sentinel.models.ContainerFailure;
+import com.abovebytes.stack.sentinel.models.Response;
 import com.abovebytes.stack.sentinel.services.email.EmailSenderService;
 import com.abovebytes.stack.sentinel.services.properties.PropertyService;
 import com.abovebytes.stack.sentinel.utils.Constants;
@@ -16,6 +18,7 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -82,37 +85,65 @@ public class MonitorService {
 
     public void checkContainers() {
         log.info("Checking containers in docker started at {}", LocalDateTime.now());
-        Property containerList = propertyService.getProperty(Constants.DOCKER_CONTAINER_LIST).orElse(null);
+        try {
+            Property containerList = propertyService.getProperty(Constants.DOCKER_CONTAINER_LIST).orElse(null);
 
-        if (Arrays.asList(profileChecker.getActiveProfiles()).contains("local")) {
-            log.info("Skipping local docker container check");
-           return;
-        }
+            if (Arrays.asList(profileChecker.getActiveProfiles()).contains("local")) {
+                log.info("Skipping local docker container check");
+//           return;
+            }
 
-        if (containerList != null) {
-            List<String> containersToMonitor = List.of(containerList.getValue().split(","));
-            log.info("Found {} containers to monitor in docker {}", containersToMonitor.size(), containersToMonitor);
-            List<Container> runningContainers = dockerClient.listContainersCmd()
-                    .withShowAll(true)
-                    .exec();
+            if (containerList != null) {
+                List<String> containersToMonitor = List.of(containerList.getValue().split(","));
+                log.info("Found {} containers to monitor in docker {}", containersToMonitor.size(), containersToMonitor);
+                List<Container> runningContainers = dockerClient.listContainersCmd()
+                        .withShowAll(true)
+                        .exec();
 
-            List<String> containerNames = runningContainers.stream()
-                    .flatMap(c -> Arrays.stream(c.getNames()))
-                    .map(name -> name.startsWith("/") ? name.substring(1) : name)
-                    .toList();
+                List<String> containerNames = runningContainers.stream()
+                        .flatMap(c -> Arrays.stream(c.getNames()))
+                        .map(name -> name.startsWith("/") ? name.substring(1) : name)
+                        .toList();
 
-            log.info("Found {} containers: {}", containerNames.size(), containerNames);
+                log.info("Found {} containers: {}", containerNames.size(), containerNames);
 
-            for (String containerName : containersToMonitor) {
-                boolean isRunning = runningContainers.stream()
-                        .anyMatch(c -> Arrays.asList(c.getNames()).contains("/" + containerName)
-                                && c.getState().equalsIgnoreCase("running"));
+                List<ContainerFailure> failedContainers = new ArrayList<>();
 
-                if (!isRunning) {
-                    log.info("Container stopped ror not running {}", containerName);
-                    emailSenderService.sendEmailDockerDown(containerName);
+                for (String containerName : containersToMonitor) {
+                    Optional<Container> containerOpt = runningContainers.stream()
+                            .filter(c -> Arrays.asList(c.getNames()).contains("/" + containerName))
+                            .findFirst();
+
+                    if (containerOpt.isEmpty()) {
+                        log.error("Container {} is MISSING from the host!", containerName);
+                        failedContainers.add(new ContainerFailure(containerName, "Missing", "Container not found on host.", "Container not found on host."));
+                        continue;
+                    }
+
+                    Container c = containerOpt.get();
+                    String state = c.getState(); // e.g., "exited", "running", "paused"
+                    String status = c.getStatus(); // e.g., "Up 2 hours (unhealthy)"
+
+                    boolean isUnhealthy = status.contains("(unhealthy)");
+                    boolean isNotRunning = !state.equalsIgnoreCase("running");
+
+                    if (isNotRunning || isUnhealthy) {
+                        String reason = isUnhealthy ? "Healthcheck failed" : status;
+                        log.warn("Alerting: {} is {}", containerName, reason);
+
+                        failedContainers.add(new ContainerFailure(containerName, state, status, reason));
+                    }
+                }
+
+                if (!failedContainers.isEmpty()) {
+                    // Send ONE email containing the whole list
+                    Response response = emailSenderService.sendBulkAlert(failedContainers);
+                    log.info("Bulk email sent: {}", response.getMessage());
                 }
             }
+        } catch (Exception e) {
+            log.error("Failed to connect to Docker daemon: {}", e.getMessage());
+            // Optionally alert that the MONITOR itself is having issues
         }
     }
 
