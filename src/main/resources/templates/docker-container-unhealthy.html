@@ -27,28 +27,43 @@
             text-align: center;
             font-size: 20px;
             font-weight: 700;
-            font-family: 'Roboto', sans-serif;
         }
         .content {
             padding: 25px;
             line-height: 1.6;
-            font-family: 'Roboto', sans-serif;
         }
         h1 {
             font-size: 22px;
             margin-top: 0;
             color: #d32f2f;
             text-align: center;
-            font-family: 'Roboto', sans-serif;
+        }
+        .status-table {
+            width: 100%;
+            background-color: #fcfcfc;
+            border-radius: 8px;
+            border-collapse: collapse;
+            margin: 20px 0;
+            border: 1px solid #eee;
+        }
+        .status-table td, th {
+            padding: 12px 15px;
+            font-size: 14px;
+        }
+        .status-table td {
+            border-bottom: 1px solid #eee;
+        }
+        .table-header {
+            background-color: #eee;
+            text-align: left;
+        }
+        th {
+            font-weight: 700;
+            color: #555;
         }
         .highlight {
             font-weight: 700;
             color: #d32f2f;
-        }
-        p {
-            margin: 10px 0;
-            font-size: 15px;
-            font-family: 'Roboto', sans-serif;
         }
         .footer {
             font-size: 12px;
@@ -57,45 +72,50 @@
             padding: 15px;
             background: #f9f9f9;
             border-top: 1px solid #eee;
-            font-family: 'Roboto', sans-serif;
         }
 
-        /* Dark mode styling for supported clients */
         @media (prefers-color-scheme: dark) {
-            body {
-                background-color: #121212 !important;
-                color: #e0e0e0 !important;
-            }
-            .container {
-                background: #1e1e1e !important;
-                box-shadow: none !important;
-            }
-            .header {
-                background-color: #b71c1c !important;
-            }
-            h1, .highlight {
-                color: #ff5252 !important;
-            }
-            .footer {
-                background: #181818 !important;
-                color: #aaa !important;
-                border-top: 1px solid #333 !important;
-            }
+            body { background-color: #121212 !important; color: #e0e0e0 !important; }
+            .container { background: #1e1e1e !important; }
+            .header { background-color: #b71c1c !important; }
+            .table-header { background-color: #333 !important; }
+            th { color: #ccc !important; }
+            .status-table { background-color: #252525 !important; border: 1px solid #333 !important; }
+            .status-table td { border-bottom: 1px solid #333 !important; color: #ddd !important; }
+            h1, .highlight { color: #ff5252 !important; }
+            .footer { background: #181818 !important; border-top: 1px solid #333 !important; }
         }
     </style>
 </head>
 <body>
 <div class="container">
-    <div class="header">&#x1F6A8; CRITICAL SYSTEM ALERT</div>
+    <div class="header">&#x1F6A8; STACK-SENTINEL ALERT</div>
     <div class="content">
-        <h1>Docker Container Down</h1>
+        <h1>Incident Detected</h1>
         <p>Hello,</p>
-        <p>The following Docker container is currently <span class="highlight">not running</span>:</p>
-        <p><strong>Container Name:</strong> ${containerName}</p>
-        <p>Please check and restart the container to restore services immediately.</p>
+        <p>The monitoring system has detected an issue with the following containers in your stack:</p>
+
+        <table class="status-table">
+            <thead>
+            <tr class="table-header">
+                <th>Container</th>
+                <th>State</th>
+                <th>Reason</th>
+            </tr>
+            </thead>
+            <tbody>
+            <#list failedContainers as failure>
+            <tr>
+                <td><strong>${failure.name}</strong></td>
+                <td class="highlight">${failure.state}</td>
+                <td>${failure.reason}</td>
+            </tr>
+            </#list>
+            </tbody>
+        </table>
     </div>
     <div class="footer">
-        This is an automated alert from your monitoring system.
+        Automated alert from <strong>Stack-Sentinel</strong>.
     </div>
 </div>
 </body>
