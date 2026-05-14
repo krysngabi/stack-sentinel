@@ -65,17 +65,17 @@ public class MonitorService {
             scheduledTask.cancel(false);
         }
 
-        // Get interval from DB (default to 1 hour if missing or invalid)
-        long intervalHours = getIntervalHoursFromDb().orElse(1L);
+        // Get interval from DB (default to n mins if missing or invalid)
+        long minutes = getIntervalMinutesFromDb().orElse(15L);
 
-        log.info("Scheduling docker monitor task to run every {} hours", intervalHours);
+        log.info("Scheduling docker monitor task to run every {} minute(s)", minutes);
 
-        scheduledTask = scheduler.scheduleAtFixedRate(this::checkContainers, Duration.ofHours(intervalHours));
+        scheduledTask = scheduler.scheduleAtFixedRate(this::checkContainers, Duration.ofMinutes(minutes));
     }
 
-    private Optional<Long> getIntervalHoursFromDb() {
+    private Optional<Long> getIntervalMinutesFromDb() {
         try {
-            return propertyService.getProperty(Constants.MONITOR_INTERVAL_HOURS)
+            return propertyService.getProperty(Constants.MONITOR_INTERVAL_MINUTES)
                     .map(property -> Long.parseLong(property.getValue()));
         } catch (NumberFormatException e) {
             log.warn("Invalid monitor interval hours value in DB", e);
@@ -105,7 +105,7 @@ public class MonitorService {
                         .map(name -> name.startsWith("/") ? name.substring(1) : name)
                         .toList();
 
-                log.info("Found {} containers: {}", containerNames.size(), containerNames);
+                log.info("Found {} running docker containers: {}", containerNames.size(), containerNames);
 
                 List<ContainerFailure> failedContainers = new ArrayList<>();
 
@@ -139,6 +139,8 @@ public class MonitorService {
                     // Send ONE email containing the whole list
                     Response response = emailSenderService.sendBulkAlert(failedContainers);
                     log.info("Bulk email sent: {}", response.getMessage());
+                } else {
+                    log.info("No containers are unhealthy or missing.");
                 }
             }
         } catch (Exception e) {
